@@ -154,6 +154,7 @@ uvx --from git+https://github.com/valderan/vvk-charts-mcp.git vvk-charts-mcp
 - `create_pie_chart`
 - `create_scatter_chart`
 - `create_area_chart`
+- `create_combined_dashboard` (несколько типов графиков на одном изображении)
 
 Все инструменты поддерживают:
 
@@ -162,6 +163,58 @@ uvx --from git+https://github.com/valderan/vvk-charts-mcp.git vvk-charts-mcp
 - `width` / `height`
 - формат `format`
 - путь сохранения `output_path`
+
+### Комбинированные дашборды
+
+Используйте `create_combined_dashboard`, чтобы строить несколько панелей в одном изображении (например line + bar или line + pie).
+
+Минимальный пример payload:
+
+```json
+{
+  "title": "Marketing Dashboard",
+  "rows": 1,
+  "cols": 2,
+  "format": "png",
+  "output_path": "./demo",
+  "filename": "combined_dashboard",
+  "panels": [
+    {
+      "type": "line",
+      "row": 1,
+      "col": 1,
+      "title": "Revenue Trend",
+      "x_label": "Month",
+      "y_label": "k USD",
+      "data": [
+        {
+          "name": "Revenue",
+          "x": ["Jan", "Feb", "Mar", "Apr"],
+          "y": [120, 132, 148, 160]
+        }
+      ],
+      "options": {
+        "line_shape": "spline"
+      }
+    },
+    {
+      "type": "pie",
+      "row": 1,
+      "col": 2,
+      "title": "Budget Split",
+      "data": [
+        {
+          "labels": ["Search", "Social", "Email"],
+          "values": [45, 35, 20]
+        }
+      ],
+      "options": {
+        "hole": 0.45
+      }
+    }
+  ]
+}
+```
 
 ## Локальная разработка
 

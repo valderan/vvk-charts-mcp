@@ -5,7 +5,9 @@ from typing import Any, Literal
 
 import mcp.server.stdio
 import mcp.types as types
+import plotly.graph_objects as go
 from mcp.server import Server
+from plotly.subplots import make_subplots
 
 from vvk_charts_mcp.charts import (
     AreaChart,
@@ -37,6 +39,140 @@ def parse_data_series(data: list[dict[str, Any]]) -> list[DataSeries]:
 def parse_pie_data_series(data: list[dict[str, Any]]) -> list[PieDataSeries]:
     """Парсит список словарей в список PieDataSeries."""
     return [PieDataSeries(**item) for item in data]
+
+
+def _build_combined_figure(
+    panels: list[dict[str, Any]],
+    rows: int,
+    cols: int,
+    theme: ChartTheme,
+    title: str | None,
+    width: int | None,
+    height: int | None,
+    shared_xaxes: bool,
+    vertical_spacing: float,
+    horizontal_spacing: float,
+) -> go.Figure:
+    """Создаёт комбинированный дашборд из нескольких графиков."""
+    specs: list[list[dict[str, str]]] = []
+    subplot_titles: list[str] = []
+
+    panel_map: dict[tuple[int, int], dict[str, Any]] = {
+        (int(panel["row"]), int(panel["col"])): panel for panel in panels
+    }
+
+    for row in range(1, rows + 1):
+        spec_row: list[dict[str, str]] = []
+        for col in range(1, cols + 1):
+            panel = panel_map.get((row, col))
+            if panel and panel.get("type") == "pie":
+                spec_row.append({"type": "domain"})
+            else:
+                spec_row.append({"type": "xy"})
+
+            subplot_titles.append(panel.get("title", "") if panel else "")
+        specs.append(spec_row)
+
+    figure = make_subplots(
+        rows=rows,
+        cols=cols,
+        specs=specs,
+        subplot_titles=subplot_titles,
+        shared_xaxes=shared_xaxes,
+        vertical_spacing=vertical_spacing,
+        horizontal_spacing=horizontal_spacing,
+    )
+
+    for panel in panels:
+        panel_type = panel["type"]
+        row = int(panel["row"])
+        col = int(panel["col"])
+        panel_data = panel.get("data", [])
+        options = panel.get("options", {})
+
+        if panel_type == "line":
+            chart_figure = LineChart(theme=theme).create_figure(
+                parse_data_series(panel_data),
+                line_mode=options.get("line_mode", "lines+markers"),
+                line_shape=options.get("line_shape", "linear"),
+            )
+        elif panel_type == "bar":
+            chart_figure = BarChart(theme=theme).create_figure(
+                parse_data_series(panel_data),
+                orientation=options.get("orientation", "v"),
+                barmode=options.get("barmode", "group"),
+            )
+        elif panel_type == "pie":
+            chart_figure = PieChart(theme=theme, showlegend=False).create_figure(
+                parse_pie_data_series(panel_data),
+                hole=options.get("hole", 0.0),
+                textinfo=options.get("textinfo", "label+percent"),
+            )
+        elif panel_type == "scatter":
+            chart_figure = ScatterChart(theme=theme).create_figure(
+                parse_data_series(panel_data),
+                show_line=options.get("show_line", False),
+            )
+        elif panel_type == "area":
+            chart_figure = AreaChart(theme=theme).create_figure(
+                parse_data_series(panel_data),
+                stack=options.get("stack", True),
+                normalize=options.get("normalize", False),
+                opacity=options.get("opacity", 0.6),
+            )
+        else:
+            raise ValueError(f"Unsupported panel type: {panel_type}")
+
+        for trace in chart_figure.data:
+            figure.add_trace(trace, row=row, col=col)
+
+        if panel_type != "pie":
+            if panel.get("x_label"):
+                figure.update_xaxes(title_text=panel["x_label"], row=row, col=col)
+            if panel.get("y_label"):
+                figure.update_yaxes(title_text=panel["y_label"], row=row, col=col)
+
+    figure.update_layout(
+        title={
+            "text": title,
+            "font": {
+                "family": theme.font_family,
+                "size": theme.title_font_size,
+                "color": theme.font_color,
+            },
+            "x": 0.5,
+            "xanchor": "center",
+        }
+        if title
+        else None,
+        font={"family": theme.font_family, "color": theme.font_color},
+        paper_bgcolor=theme.paper_bgcolor,
+        plot_bgcolor=theme.plot_background,
+        margin=theme.margin,
+        showlegend=theme.show_legend,
+        legend=theme.get_legend_settings() if theme.show_legend else {},
+        width=width,
+        height=height,
+    )
+
+    figure.update_xaxes(
+        tickfont={
+            "family": theme.font_family,
+            "size": theme.tick_font_size,
+            "color": theme.font_color,
+        },
+        **theme.get_grid_settings(),
+    )
+    figure.update_yaxes(
+        tickfont={
+            "family": theme.font_family,
+            "size": theme.tick_font_size,
+            "color": theme.font_color,
+        },
+        **theme.get_grid_settings(),
+    )
+
+    return figure
 
 
 @server.list_tools()
@@ -328,6 +464,103 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["data"],
             },
         ),
+        types.Tool(
+            name="create_combined_dashboard",
+            description="Создаёт комбинированный дашборд из нескольких графиков и диаграмм "
+            "на одном изображении.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Общий заголовок дашборда"},
+                    "rows": {"type": "integer", "minimum": 1, "default": 1},
+                    "cols": {"type": "integer", "minimum": 1, "default": 2},
+                    "shared_xaxes": {"type": "boolean", "default": False},
+                    "vertical_spacing": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "default": 0.12,
+                    },
+                    "horizontal_spacing": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "default": 0.08,
+                    },
+                    "theme": {"type": "object", "description": "Тема оформления"},
+                    "format": {
+                        "type": "string",
+                        "enum": ["png", "svg", "base64"],
+                        "default": "base64",
+                    },
+                    "output_path": {"type": "string"},
+                    "filename": {"type": "string", "default": "combined_dashboard"},
+                    "width": {"type": "integer"},
+                    "height": {"type": "integer"},
+                    "panels": {
+                        "type": "array",
+                        "description": "Массив панелей дашборда",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["line", "bar", "pie", "scatter", "area"],
+                                },
+                                "row": {"type": "integer", "minimum": 1},
+                                "col": {"type": "integer", "minimum": 1},
+                                "title": {"type": "string"},
+                                "x_label": {"type": "string"},
+                                "y_label": {"type": "string"},
+                                "data": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "x": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "integer",
+                                                        "boolean",
+                                                    ]
+                                                },
+                                            },
+                                            "y": {
+                                                "type": "array",
+                                                "items": {"type": "number"},
+                                            },
+                                            "values": {
+                                                "type": "array",
+                                                "items": {"type": "number"},
+                                            },
+                                            "labels": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                            },
+                                            "name": {"type": "string"},
+                                            "color": {"type": "string"},
+                                            "colors": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                            },
+                                        },
+                                    },
+                                },
+                                "options": {
+                                    "type": "object",
+                                    "description": "Опции для конкретного типа панели",
+                                },
+                            },
+                            "required": ["type", "row", "col", "data"],
+                        },
+                    },
+                },
+                "required": ["panels"],
+            },
+        ),
     ]
 
 
@@ -440,6 +673,30 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
             )
             series = parse_data_series(data)
             figure = chart.build(series, stack=stack, normalize=normalize, opacity=opacity)
+
+        elif name == "create_combined_dashboard":
+            panels = arguments.get("panels", [])
+            rows = arguments.get("rows", 1)
+            cols = arguments.get("cols", 2)
+            shared_xaxes = arguments.get("shared_xaxes", False)
+            vertical_spacing = arguments.get("vertical_spacing", 0.12)
+            horizontal_spacing = arguments.get("horizontal_spacing", 0.08)
+
+            if not isinstance(panels, list) or len(panels) == 0:
+                raise ValueError("'panels' must be a non-empty array")
+
+            figure = _build_combined_figure(
+                panels=panels,
+                rows=rows,
+                cols=cols,
+                theme=theme,
+                title=title,
+                width=width,
+                height=height,
+                shared_xaxes=shared_xaxes,
+                vertical_spacing=vertical_spacing,
+                horizontal_spacing=horizontal_spacing,
+            )
 
         else:
             return [types.TextContent(type="text", text=f"Неизвестный инструмент: {name}")]

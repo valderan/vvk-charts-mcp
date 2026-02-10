@@ -153,6 +153,7 @@ Use `ai/vvk-charts-agent.md` as your chart-focused agent prompt:
 - `create_pie_chart`
 - `create_scatter_chart`
 - `create_area_chart`
+- `create_combined_dashboard` (mix multiple chart types in one image)
 
 All tools support:
 
@@ -161,6 +162,58 @@ All tools support:
 - `width` / `height`
 - output `format`
 - optional save location (`output_path`)
+
+### Combined dashboards
+
+Use `create_combined_dashboard` to render multiple panels in one image (for example line + bar, or line + pie).
+
+Minimal payload example:
+
+```json
+{
+  "title": "Marketing Dashboard",
+  "rows": 1,
+  "cols": 2,
+  "format": "png",
+  "output_path": "./demo",
+  "filename": "combined_dashboard",
+  "panels": [
+    {
+      "type": "line",
+      "row": 1,
+      "col": 1,
+      "title": "Revenue Trend",
+      "x_label": "Month",
+      "y_label": "k USD",
+      "data": [
+        {
+          "name": "Revenue",
+          "x": ["Jan", "Feb", "Mar", "Apr"],
+          "y": [120, 132, 148, 160]
+        }
+      ],
+      "options": {
+        "line_shape": "spline"
+      }
+    },
+    {
+      "type": "pie",
+      "row": 1,
+      "col": 2,
+      "title": "Budget Split",
+      "data": [
+        {
+          "labels": ["Search", "Social", "Email"],
+          "values": [45, 35, 20]
+        }
+      ],
+      "options": {
+        "hole": 0.45
+      }
+    }
+  ]
+}
+```
 
 ## Local development
 
