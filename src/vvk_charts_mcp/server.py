@@ -56,8 +56,16 @@ async def list_tools() -> list[types.Tool]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "x": {"type": "array", "description": "Значения оси X"},
-                                "y": {"type": "array", "description": "Значения оси Y"},
+                                "x": {
+                                    "type": "array",
+                                    "items": {"type": ["string", "number", "integer", "boolean"]},
+                                    "description": "Значения оси X",
+                                },
+                                "y": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "description": "Значения оси Y",
+                                },
                                 "name": {"type": "string", "description": "Название серии"},
                                 "color": {"type": "string", "description": "Цвет серии"},
                             },
@@ -109,8 +117,16 @@ async def list_tools() -> list[types.Tool]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "x": {"type": "array", "description": "Категории"},
-                                "y": {"type": "array", "description": "Значения"},
+                                "x": {
+                                    "type": "array",
+                                    "items": {"type": ["string", "number", "integer", "boolean"]},
+                                    "description": "Категории",
+                                },
+                                "y": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "description": "Значения",
+                                },
                                 "name": {"type": "string", "description": "Название серии"},
                                 "color": {"type": "string", "description": "Цвет серии"},
                             },
@@ -205,8 +221,14 @@ async def list_tools() -> list[types.Tool]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "x": {"type": "array"},
-                                "y": {"type": "array"},
+                                "x": {
+                                    "type": "array",
+                                    "items": {"type": ["string", "number", "integer", "boolean"]},
+                                },
+                                "y": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                },
                                 "name": {"type": "string"},
                                 "color": {"type": "string"},
                                 "marker": {
@@ -259,8 +281,14 @@ async def list_tools() -> list[types.Tool]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "x": {"type": "array"},
-                                "y": {"type": "array"},
+                                "x": {
+                                    "type": "array",
+                                    "items": {"type": ["string", "number", "integer", "boolean"]},
+                                },
+                                "y": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                },
                                 "name": {"type": "string"},
                                 "color": {"type": "string"},
                             },
@@ -317,6 +345,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
         height = arguments.get("height")
 
         theme = parse_theme(theme_dict)
+
+        chart: Any
+        series: list[Any]
+        figure: Any
 
         if name == "create_line_chart":
             x_label = arguments.get("x_label")

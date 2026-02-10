@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from vvk_charts_mcp.charts import (
     AreaChart,
@@ -18,7 +18,7 @@ from vvk_charts_mcp.charts import (
 )
 from vvk_charts_mcp.utils.export import export_chart
 
-FormatName = str
+FormatName = Literal["png", "svg", "base64"]
 
 
 @dataclass
@@ -168,7 +168,7 @@ def choose_formats() -> list[FormatName]:
     print("  4. Base64 (both)")
 
     picked = ask("Format", "3")
-    mapping = {
+    mapping: dict[str, list[FormatName]] = {
         "1": ["png"],
         "2": ["svg"],
         "3": ["png", "svg"],
@@ -184,6 +184,9 @@ def build_chart(template: Template, width: int, height: int) -> tuple[Any, str]:
         plot_background="#F7FAFC",
         colors=["#2563EB", "#F59E0B", "#10B981", "#EF4444", "#8B5CF6"],
     )
+
+    chart: Any
+    data: list[Any]
 
     if template.chart_type == "line":
         chart = LineChart(
@@ -278,9 +281,11 @@ def run_interactive() -> int:
     if "base64_svg" in result:
         print("- Base64 SVG generated")
     if "png" in result:
-        print(f"- PNG: {result['png']}")
+        png_value = result["png"]
+        print(f"- PNG: {png_value if isinstance(png_value, str) else '<bytes>'}")
     if "svg" in result:
-        print(f"- SVG: {result['svg']}")
+        svg_value = result["svg"]
+        print(f"- SVG: {svg_value if isinstance(svg_value, str) else '<content>'}")
     return 0
 
 

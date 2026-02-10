@@ -2,7 +2,7 @@
 
 import base64
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import plotly.graph_objects as go
 
@@ -29,12 +29,18 @@ def export_to_png(
     Returns:
         Байты изображения если output_path не указан, иначе None
     """
-    img_bytes = figure.to_image(
-        format="png",
-        width=width or figure.layout.width or 1200,
-        height=height or figure.layout.height or 800,
-        scale=scale,
-        engine="kaleido",
+    figure_width = cast(int | None, getattr(figure.layout, "width", None))
+    figure_height = cast(int | None, getattr(figure.layout, "height", None))
+
+    img_bytes = cast(
+        bytes,
+        figure.to_image(
+            format="png",
+            width=width or figure_width or 1200,
+            height=height or figure_height or 800,
+            scale=scale,
+            engine="kaleido",
+        ),
     )
 
     if output_path:
@@ -62,11 +68,17 @@ def export_to_svg(
     Returns:
         SVG строка если output_path не указан, иначе None
     """
-    svg_str = figure.to_image(
-        format="svg",
-        width=width or figure.layout.width or 1200,
-        height=height or figure.layout.height or 800,
-        engine="kaleido",
+    figure_width = cast(int | None, getattr(figure.layout, "width", None))
+    figure_height = cast(int | None, getattr(figure.layout, "height", None))
+
+    svg_str = cast(
+        bytes,
+        figure.to_image(
+            format="svg",
+            width=width or figure_width or 1200,
+            height=height or figure_height or 800,
+            engine="kaleido",
+        ),
     ).decode("utf-8")
 
     if output_path:
