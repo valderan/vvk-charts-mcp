@@ -1,174 +1,85 @@
 # vvk-charts-mcp
 
-Современный MCP сервер на Python для построения графиков и диаграмм (line, bar, pie, scatter, area) с подписями, кастомизацией темы и экспортом в PNG/SVG/base64.
+<p>
+  <a href="https://github.com/valderan/vvk-charts-mcp/blob/main/LICENSE"><img alt="Лицензия MIT" src="https://img.shields.io/badge/license-MIT-0ea5e9" /></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2563eb" />
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-enabled-10b981" />
+  <img alt="Plotly" src="https://img.shields.io/badge/Plotly-modern%20charts-7c3aed" />
+</p>
+
+Язык документации:
+
+- Русский: `README_ru.md`
+- English: [`README.md`](README.md)
+
+Современный MCP сервер на Python для построения графиков и диаграмм (`line`, `bar`, `pie`, `scatter`, `area`, `combined dashboard`) с настраиваемыми темами и экспортом в PNG/SVG/base64.
+
+<p align="center">
+  <img src="demo/demo_combined_dark_corporate.png" alt="Пример комбинированного дашборда в стиле dark corporate" width="560" />
+  <br />
+  <em>Пример результата: комбинированный дашборд в стиле dark corporate, созданный через MCP tool.</em>
+</p>
+
+## Содержание
+
+- [Возможности](#возможности)
+- [Быстрый старт](#быстрый-старт)
+- [MCP tools](#mcp-tools)
+- [Пример payload для комбинированного дашборда](#пример-payload-для-комбинированного-дашборда)
+- [Демо-галерея](#демо-галерея)
+- [AI пресеты (skill и agent)](#ai-пресеты-skill-и-agent)
+- [Подключение в OpenCode (подробно)](#подключение-в-opencode-подробно)
+- [Подключение в Codex (подробно)](#подключение-в-codex-подробно)
+- [Локальная разработка](#локальная-разработка)
 
 ## Возможности
 
-- MCP-инструменты для `line`, `bar`, `pie`, `scatter`, `area`
-- Современный дизайн на базе Plotly и полная настройка темы
-- Поддержка больших наборов данных и нескольких серий
-- Экспорт в `png`, `svg`, `base64` (PNG + SVG)
-- Интерактивный CLI-клиент для проверки с готовыми шаблонами
+- MCP tools для одиночных графиков и смешанных дашбордов.
+- Современный стиль на базе Plotly и полная настройка темы.
+- Поддержка нескольких серий и больших наборов данных.
+- Форматы экспорта: `png`, `svg`, `base64`.
+- Интерактивный CLI-клиент с готовыми шаблонами.
 
-## Установка из GitHub (uvx)
+## Быстрый старт
+
+Установка из GitHub через `uvx`:
 
 ```bash
 uvx install git+https://github.com/valderan/vvk-charts-mcp.git
 ```
 
-## Запуск MCP сервера
+Запуск MCP сервера:
 
 ```bash
 uvx run vvk-charts-mcp
 ```
 
-## Запуск интерактивного клиента
+Запуск интерактивного клиента:
 
 ```bash
 uvx run vvk-charts-cli
 ```
 
-Клиент интерактивно спрашивает:
-
-- какой шаблон графика построить
-- куда сохранить файлы
-- в каком формате экспортировать
-- размер изображения и имя файла
-
-## AI пресеты (skill и agent)
-
-В репозитории добавлены два готовых пресета в `ai/`:
-
-- `ai/vvk-charts-skill.md` - skill-инструкция для формирования payload'ов MCP
-- `ai/vvk-charts-agent.md` - профиль агента, специализированный на графиках
-
-Можно использовать любой вариант, который удобнее пользователю.
-
-## Подключение в OpenCode (подробно)
-
-### 1) Добавить MCP сервер в OpenCode
-
-Создайте или отредактируйте `opencode.json` (глобально или в проекте):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "vvkcharts": {
-      "type": "local",
-      "enabled": true,
-      "command": [
-        "uvx",
-        "--from",
-        "git+https://github.com/valderan/vvk-charts-mcp.git",
-        "vvk-charts-mcp"
-      ]
-    }
-  }
-}
-```
-
-### 2) Установка как OpenCode skill
-
-По спецификации OpenCode skill должен лежать в `.opencode/skills/<name>/SKILL.md`, а `name` должен совпадать с именем директории.
-
-```bash
-mkdir -p .opencode/skills/vvk-charts-mcp
-cp ai/vvk-charts-skill.md .opencode/skills/vvk-charts-mcp/SKILL.md
-```
-
-Как использовать:
-- ставьте задачи по визуализации и при необходимости указывайте использовать `vvkcharts` tools;
-- модель сможет загрузить skill через встроенный инструмент `skill`.
-
-### 3) Установка как OpenCode agent
-
-```bash
-mkdir -p .opencode/agents
-cp ai/vvk-charts-agent.md .opencode/agents/vvk-charts.md
-```
-
-Как использовать:
-- в чате вызывайте `@vvk-charts ...`;
-- либо переключитесь на агента `vvk-charts` в интерфейсе OpenCode.
-
-### 4) Проверка в OpenCode
-
-- Запустите `opencode` в проекте.
-- Убедитесь, что инструменты `vvkcharts_*` доступны.
-- Тестовый запрос:
-  - `Build a monthly revenue line chart and save as png in ./output using vvkcharts`.
-
-## Подключение в Codex (подробно)
-
-Окружения Codex могут отличаться в зависимости от клиента. Используйте эту схему в Codex-совместимых клиентах с поддержкой MCP.
-
-### 1) Зарегистрировать MCP сервер
-
-Команда запуска MCP:
-
-```bash
-uvx --from git+https://github.com/valderan/vvk-charts-mcp.git vvk-charts-mcp
-```
-
-Если клиент использует JSON-конфиг (частый формат), блок обычно выглядит так:
-
-```json
-{
-  "mcpServers": {
-    "vvkcharts": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/valderan/vvk-charts-mcp.git",
-        "vvk-charts-mcp"
-      ]
-    }
-  }
-}
-```
-
-### 2) Использовать skill-файл в инструкциях Codex
-
-В Codex обычно нет автозагрузки `SKILL.md` как в OpenCode, поэтому `ai/vvk-charts-skill.md` используйте как шаблон:
-- вставьте содержимое в project/system instructions, или
-- храните как отдельный промпт-пресет и подключайте при задачах по графикам.
-
-### 3) Использовать agent-файл как профиль Codex
-
-`ai/vvk-charts-agent.md` можно использовать как системный промпт отдельного профиля:
-- создайте профиль/пресет в клиенте Codex,
-- вставьте содержимое файла,
-- выбирайте этот профиль для задач визуализации.
-
-### 4) Проверка в Codex
-
-- Отправьте запрос с явным использованием MCP, например:
-  - `Use vvkcharts tools to generate a bar chart and save it to ./output/sales-q1.png`.
-- Проверьте, что файл создан и соответствует формату.
+CLI спрашивает, что рисовать, куда сохранять, в каком формате экспортировать и какой размер изображения использовать.
 
 ## MCP tools
 
-- `create_line_chart`
-- `create_bar_chart`
-- `create_pie_chart`
-- `create_scatter_chart`
-- `create_area_chart`
-- `create_combined_dashboard` (несколько типов графиков на одном изображении)
+| Tool | Назначение |
+| --- | --- |
+| `create_line_chart` | Тренды во времени |
+| `create_bar_chart` | Сравнение категорий |
+| `create_pie_chart` | Структура долей |
+| `create_scatter_chart` | Корреляция и пузырьковые графики |
+| `create_area_chart` | Накопительная/stack структура |
+| `create_combined_dashboard` | Несколько типов графиков на одном изображении |
 
-Все инструменты поддерживают:
+Общие параметры для всех tools:
 
-- кастомную `theme`
-- `title`
-- `width` / `height`
-- формат `format`
-- путь сохранения `output_path`
+- `theme`, `title`, `width`, `height`
+- `format` (`png`, `svg`, `base64`)
+- `output_path`, `filename`
 
-### Комбинированные дашборды
-
-Используйте `create_combined_dashboard`, чтобы строить несколько панелей в одном изображении (например line + bar или line + pie).
-
-Минимальный пример payload:
+## Пример payload для комбинированного дашборда
 
 ```json
 {
@@ -216,13 +127,131 @@ uvx --from git+https://github.com/valderan/vvk-charts-mcp.git vvk-charts-mcp
 }
 ```
 
+## Демо-галерея
+
+<p>
+  <img src="demo/demo_combined_showcase.png" alt="Демо комбинированного дашборда" width="420" />
+  <img src="demo/demo_combined_dark_corporate.png" alt="Дашборд в стиле dark corporate" width="420" />
+  <img src="demo/demo_combined_pastel_startup.png" alt="Дашборд в стиле pastel startup" width="420" />
+</p>
+
+<p>
+  <img src="demo/demo_line_chart.png" alt="Линейный график" width="270" />
+  <img src="demo/demo_bar_chart.png" alt="Столбчатая диаграмма" width="270" />
+  <img src="demo/demo_pie_chart.png" alt="Круговая диаграмма" width="270" />
+  <img src="demo/demo_scatter_chart.png" alt="Точечный график" width="270" />
+  <img src="demo/demo_area_chart.png" alt="График с областями" width="270" />
+</p>
+
+## AI пресеты (skill и agent)
+
+В репозитории есть готовые пресеты в `ai/`:
+
+- `ai/vvk-charts-skill.md` - skill-инструкция для формирования payload.
+- `ai/vvk-charts-agent.md` - профиль агента под задачи визуализации.
+
+Используйте любой вариант, который удобнее в вашем процессе.
+
+## Подключение в OpenCode (подробно)
+
+### 1) Добавить MCP сервер
+
+Создайте или отредактируйте `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "vvkcharts": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/valderan/vvk-charts-mcp.git",
+        "vvk-charts-mcp"
+      ]
+    }
+  }
+}
+```
+
+### 2) Установить как OpenCode skill
+
+```bash
+mkdir -p .opencode/skills/vvk-charts-mcp
+cp ai/vvk-charts-skill.md .opencode/skills/vvk-charts-mcp/SKILL.md
+```
+
+### 3) Установить как OpenCode agent
+
+```bash
+mkdir -p .opencode/agents
+cp ai/vvk-charts-agent.md .opencode/agents/vvk-charts.md
+```
+
+### 4) Проверка
+
+- Запустите `opencode` в репозитории.
+- Убедитесь, что видны tools `vvkcharts_*`.
+- Тестовый запрос: `Build a monthly revenue line chart and save as png in ./output using vvkcharts`.
+
+Ссылки на документацию:
+
+- https://opencode.ai/docs/mcp-servers/
+- https://opencode.ai/docs/skills/
+- https://opencode.ai/docs/agents/
+
+## Подключение в Codex (подробно)
+
+Codex-совместимые клиенты могут различаться, но обычно работает следующая схема.
+
+### 1) Зарегистрировать MCP сервер
+
+```bash
+uvx --from git+https://github.com/valderan/vvk-charts-mcp.git vvk-charts-mcp
+```
+
+Типичный JSON-конфиг у многих клиентов:
+
+```json
+{
+  "mcpServers": {
+    "vvkcharts": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/valderan/vvk-charts-mcp.git",
+        "vvk-charts-mcp"
+      ]
+    }
+  }
+}
+```
+
+### 2) Переиспользовать skill и agent пресеты
+
+- `ai/vvk-charts-skill.md` используйте как шаблон инструкций.
+- `ai/vvk-charts-agent.md` используйте как системный промпт отдельного профиля.
+
+### 3) Проверка
+
+Пример запроса:
+
+`Use vvkcharts tools to generate a bar chart and save it to ./output/sales-q1.png`.
+
 ## Локальная разработка
 
 ```bash
 uv sync
 uv run ruff check .
+uv run mypy src
 ```
 
 ## Репозиторий
 
 - https://github.com/valderan/vvk-charts-mcp
+
+---
+
+English documentation: [`README.md`](README.md)
