@@ -146,6 +146,7 @@ Common options supported by all tools:
     "theme": "dark_corporate_cli",
     "use_color": true,
     "force_mono": false,
+    "raw_output": true,
     "data": [
       {
         "name": "Revenue",
@@ -156,6 +157,8 @@ Common options supported by all tools:
   }
 }
 ```
+
+`raw_output: true` is recommended for terminal clients: tool returns only chart text (no JSON wrapper).
 
 ## Demo gallery
 

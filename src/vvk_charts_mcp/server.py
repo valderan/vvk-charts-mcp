@@ -605,6 +605,11 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "use_color": {"type": "boolean", "default": True},
                     "force_mono": {"type": "boolean", "default": False},
+                    "raw_output": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Вернуть только сырой текст графика без JSON-обёртки",
+                    },
                 },
                 "required": ["type", "data"],
             },
@@ -629,6 +634,11 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "use_color": {"type": "boolean", "default": True},
                     "force_mono": {"type": "boolean", "default": False},
+                    "raw_output": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Вернуть только сырой текст дашборда без JSON-обёртки",
+                    },
                     "panels": {
                         "type": "array",
                         "items": {
@@ -825,6 +835,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 use_color=arguments.get("use_color", True),
                 force_mono=arguments.get("force_mono", False),
             )
+            if arguments.get("raw_output", False):
+                return [types.TextContent(type="text", text=str(result["chart"]))]
             return [
                 types.TextContent(
                     type="text",
@@ -842,6 +854,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 use_color=arguments.get("use_color", True),
                 force_mono=arguments.get("force_mono", False),
             )
+            if arguments.get("raw_output", False):
+                return [types.TextContent(type="text", text=str(result["dashboard"]))]
             return [
                 types.TextContent(
                     type="text",

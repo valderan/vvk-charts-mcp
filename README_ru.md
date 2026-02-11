@@ -146,6 +146,7 @@ CLI спрашивает, что рисовать, куда сохранять, 
     "theme": "dark_corporate_cli",
     "use_color": true,
     "force_mono": false,
+    "raw_output": true,
     "data": [
       {
         "name": "Revenue",
@@ -156,6 +157,8 @@ CLI спрашивает, что рисовать, куда сохранять, 
   }
 }
 ```
+
+`raw_output: true` рекомендуется для terminal-клиентов: tool вернёт только текст графика (без JSON-обёртки).
 
 ## Демо-галерея
 
