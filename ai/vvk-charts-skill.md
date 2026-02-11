@@ -23,6 +23,7 @@ Do not replace MCP rendering with ad-hoc plotting scripts unless explicitly aske
 ## Complete chart catalog
 
 Image/chart tools:
+- `list_theme_presets`
 - `create_line_chart`
 - `create_bar_chart`
 - `create_pie_chart`
@@ -108,7 +109,12 @@ Each panel should include:
 
 - Prefer modern theme styling and clear labels.
 - Use `create_combined_dashboard` for mixed visual stories.
-- If saving files, include `format`, `output_path`, `filename`, and explicit `width`/`height`.
+- Image tools always return chat preview.
+- If user asks about styles, call `list_theme_presets` first.
+- Prefer `theme_preset: clean_light` unless user requests another style.
+- Save to disk only when user explicitly asks and payload has `save_to_disk: true`.
+- File save is allowed only via MCP env `OUTPUT_DIR`.
+- Never send `output_path`.
 
 ## Payload examples
 
@@ -189,7 +195,7 @@ Each panel should include:
     "rows": 2,
     "cols": 2,
     "format": "png",
-    "output_path": "./demo",
+    "save_to_disk": true,
     "filename": "combined_showcase",
     "panels": [
       {

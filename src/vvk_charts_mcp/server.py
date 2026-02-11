@@ -1,6 +1,9 @@
 """MCP сервер для создания графиков и диаграмм."""
 
 import json
+import os
+import re
+from pathlib import Path
 from typing import Any, Literal
 
 import mcp.server.stdio
@@ -10,6 +13,9 @@ from mcp.server import Server
 from plotly.subplots import make_subplots
 
 from vvk_charts_mcp.charts import (
+    DEFAULT_IMAGE_THEME,
+    IMAGE_THEME_DESCRIPTIONS,
+    IMAGE_THEME_PRESETS,
     AreaChart,
     BarChart,
     ChartTheme,
@@ -18,18 +24,24 @@ from vvk_charts_mcp.charts import (
     PieChart,
     PieDataSeries,
     ScatterChart,
+    resolve_image_theme,
 )
 from vvk_charts_mcp.terminal import render_terminal_chart, render_terminal_dashboard
-from vvk_charts_mcp.utils.export import export_chart
+from vvk_charts_mcp.terminal.themes import CLI_THEMES, DEFAULT_CLI_THEME
+from vvk_charts_mcp.utils.export import export_chart, export_to_base64
 
 server = Server("vvk-charts-mcp")
 
-
-def parse_theme(theme_dict: dict[str, Any] | None) -> ChartTheme:
-    """Парсит словарь темы в объект ChartTheme."""
-    if theme_dict is None:
-        return ChartTheme()
-    return ChartTheme(**theme_dict)
+IMAGE_TOOL_NAMES = {
+    "create_line_chart",
+    "create_bar_chart",
+    "create_pie_chart",
+    "create_scatter_chart",
+    "create_area_chart",
+    "create_combined_dashboard",
+}
+FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+IMAGE_THEME_PRESET_NAMES = list(IMAGE_THEME_PRESETS.keys())
 
 
 def parse_data_series(data: list[dict[str, Any]]) -> list[DataSeries]:
@@ -40,6 +52,26 @@ def parse_data_series(data: list[dict[str, Any]]) -> list[DataSeries]:
 def parse_pie_data_series(data: list[dict[str, Any]]) -> list[PieDataSeries]:
     """Парсит список словарей в список PieDataSeries."""
     return [PieDataSeries(**item) for item in data]
+
+
+def _resolve_output_dir() -> Path | None:
+    output_dir = os.getenv("OUTPUT_DIR", "").strip()
+    if not output_dir:
+        return None
+    return Path(output_dir).expanduser().resolve()
+
+
+def _strip_data_uri_prefix(value: str) -> str:
+    if value.startswith("data:image") and "," in value:
+        return value.split(",", 1)[1]
+    return value
+
+
+def _sanitize_filename(name: str | None, fallback: str) -> str:
+    base_name = Path((name or fallback).strip() or fallback).name
+    stem = Path(base_name).stem or fallback
+    safe_name = FILENAME_SAFE_RE.sub("_", stem).strip("._")
+    return safe_name or fallback
 
 
 def _build_combined_figure(
@@ -181,6 +213,17 @@ async def list_tools() -> list[types.Tool]:
     """Возвращает список доступных инструментов."""
     return [
         types.Tool(
+            name="list_theme_presets",
+            description=(
+                "Возвращает список доступных тем для image и terminal графиков, "
+                "чтобы выбрать тему без чтения документации."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        types.Tool(
             name="create_line_chart",
             description="Создаёт линейный график с поддержкой множественных серий данных. "
             "Возвращает base64 изображение или путь к файлу.",
@@ -212,6 +255,12 @@ async def list_tools() -> list[types.Tool]:
                     "title": {"type": "string", "description": "Заголовок графика"},
                     "x_label": {"type": "string", "description": "Подпись оси X"},
                     "y_label": {"type": "string", "description": "Подпись оси Y"},
+                    "theme_preset": {
+                        "type": "string",
+                        "enum": IMAGE_THEME_PRESET_NAMES,
+                        "default": DEFAULT_IMAGE_THEME,
+                        "description": "Название базовой темы оформления",
+                    },
                     "theme": {"type": "object", "description": "Тема оформления (кастомизация)"},
                     "format": {
                         "type": "string",
@@ -219,7 +268,14 @@ async def list_tools() -> list[types.Tool]:
                         "default": "base64",
                         "description": "Формат вывода",
                     },
-                    "output_path": {"type": "string", "description": "Путь для сохранения файла"},
+                    "save_to_disk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "Сохранять файл на диск в директорию из env OUTPUT_DIR. "
+                            "По умолчанию false (только preview для чата)."
+                        ),
+                    },
                     "filename": {
                         "type": "string",
                         "default": "line_chart",
@@ -273,13 +329,23 @@ async def list_tools() -> list[types.Tool]:
                     "title": {"type": "string", "description": "Заголовок графика"},
                     "x_label": {"type": "string", "description": "Подпись оси X"},
                     "y_label": {"type": "string", "description": "Подпись оси Y"},
+                    "theme_preset": {
+                        "type": "string",
+                        "enum": IMAGE_THEME_PRESET_NAMES,
+                        "default": DEFAULT_IMAGE_THEME,
+                        "description": "Название базовой темы оформления",
+                    },
                     "theme": {"type": "object", "description": "Тема оформления"},
                     "format": {
                         "type": "string",
                         "enum": ["png", "svg", "base64"],
                         "default": "base64",
                     },
-                    "output_path": {"type": "string", "description": "Путь для сохранения"},
+                    "save_to_disk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Сохранять файл на диск в директорию из env OUTPUT_DIR",
+                    },
                     "filename": {"type": "string", "default": "bar_chart"},
                     "width": {"type": "integer"},
                     "height": {"type": "integer"},
@@ -320,13 +386,23 @@ async def list_tools() -> list[types.Tool]:
                         },
                     },
                     "title": {"type": "string", "description": "Заголовок графика"},
+                    "theme_preset": {
+                        "type": "string",
+                        "enum": IMAGE_THEME_PRESET_NAMES,
+                        "default": DEFAULT_IMAGE_THEME,
+                        "description": "Название базовой темы оформления",
+                    },
                     "theme": {"type": "object", "description": "Тема оформления"},
                     "format": {
                         "type": "string",
                         "enum": ["png", "svg", "base64"],
                         "default": "base64",
                     },
-                    "output_path": {"type": "string"},
+                    "save_to_disk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Сохранять файл на диск в директорию из env OUTPUT_DIR",
+                    },
                     "filename": {"type": "string", "default": "pie_chart"},
                     "width": {"type": "integer"},
                     "height": {"type": "integer"},
@@ -386,13 +462,23 @@ async def list_tools() -> list[types.Tool]:
                     "title": {"type": "string"},
                     "x_label": {"type": "string"},
                     "y_label": {"type": "string"},
+                    "theme_preset": {
+                        "type": "string",
+                        "enum": IMAGE_THEME_PRESET_NAMES,
+                        "default": DEFAULT_IMAGE_THEME,
+                        "description": "Название базовой темы оформления",
+                    },
                     "theme": {"type": "object"},
                     "format": {
                         "type": "string",
                         "enum": ["png", "svg", "base64"],
                         "default": "base64",
                     },
-                    "output_path": {"type": "string"},
+                    "save_to_disk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Сохранять файл на диск в директорию из env OUTPUT_DIR",
+                    },
                     "filename": {"type": "string", "default": "scatter_chart"},
                     "width": {"type": "integer"},
                     "height": {"type": "integer"},
@@ -435,13 +521,23 @@ async def list_tools() -> list[types.Tool]:
                     "title": {"type": "string"},
                     "x_label": {"type": "string"},
                     "y_label": {"type": "string"},
+                    "theme_preset": {
+                        "type": "string",
+                        "enum": IMAGE_THEME_PRESET_NAMES,
+                        "default": DEFAULT_IMAGE_THEME,
+                        "description": "Название базовой темы оформления",
+                    },
                     "theme": {"type": "object"},
                     "format": {
                         "type": "string",
                         "enum": ["png", "svg", "base64"],
                         "default": "base64",
                     },
-                    "output_path": {"type": "string"},
+                    "save_to_disk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Сохранять файл на диск в директорию из env OUTPUT_DIR",
+                    },
                     "filename": {"type": "string", "default": "area_chart"},
                     "width": {"type": "integer"},
                     "height": {"type": "integer"},
@@ -488,13 +584,23 @@ async def list_tools() -> list[types.Tool]:
                         "maximum": 1,
                         "default": 0.08,
                     },
+                    "theme_preset": {
+                        "type": "string",
+                        "enum": IMAGE_THEME_PRESET_NAMES,
+                        "default": DEFAULT_IMAGE_THEME,
+                        "description": "Название базовой темы оформления",
+                    },
                     "theme": {"type": "object", "description": "Тема оформления"},
                     "format": {
                         "type": "string",
                         "enum": ["png", "svg", "base64"],
                         "default": "base64",
                     },
-                    "output_path": {"type": "string"},
+                    "save_to_disk": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Сохранять файл на диск в директорию из env OUTPUT_DIR",
+                    },
                     "filename": {"type": "string", "default": "combined_dashboard"},
                     "width": {"type": "integer"},
                     "height": {"type": "integer"},
@@ -701,23 +807,75 @@ async def list_tools() -> list[types.Tool]:
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.ContentBlock]:
     """Обрабатывает вызов инструмента."""
     try:
         data = arguments.get("data", [])
         title = arguments.get("title")
         theme_arg = arguments.get("theme")
+        theme_preset_arg = arguments.get("theme_preset")
         fmt: Literal["png", "svg", "base64"] = arguments.get("format", "base64")
-        output_path = arguments.get("output_path")
-        filename = arguments.get("filename", f"{name.replace('create_', '')}")
+        save_to_disk = bool(arguments.get("save_to_disk", False))
+        filename = _sanitize_filename(
+            arguments.get("filename"),
+            f"{name.replace('create_', '')}",
+        )
         width = arguments.get("width")
         height = arguments.get("height")
 
-        theme = (
-            parse_theme(theme_arg)
-            if isinstance(theme_arg, dict) or theme_arg is None
-            else ChartTheme()
-        )
+        if name == "list_theme_presets":
+            payload = {
+                "success": True,
+                "defaults": {
+                    "image": DEFAULT_IMAGE_THEME,
+                    "terminal": DEFAULT_CLI_THEME,
+                },
+                "image_themes": [
+                    {
+                        "name": preset_name,
+                        "description": IMAGE_THEME_DESCRIPTIONS.get(preset_name, ""),
+                        "sample_colors": preset_data.get("colors", []),
+                    }
+                    for preset_name, preset_data in IMAGE_THEME_PRESETS.items()
+                ],
+                "terminal_themes": [
+                    {
+                        "name": theme_name,
+                        "description": (
+                            "CLI тема для терминального рендера"
+                            if theme_name == "dark_corporate_cli"
+                            else "CLI пастельная тема для терминального рендера"
+                        ),
+                        "colors": theme_data.get("colors", []),
+                        "mono_symbol": theme_data.get("mono_symbol", "#"),
+                    }
+                    for theme_name, theme_data in CLI_THEMES.items()
+                ],
+            }
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps(payload, ensure_ascii=False, indent=2),
+                )
+            ]
+
+        if name in IMAGE_TOOL_NAMES and "output_path" in arguments:
+            raise ValueError(
+                "'output_path' is not supported. Use env OUTPUT_DIR and 'save_to_disk'."
+            )
+
+        theme_preset_used = DEFAULT_IMAGE_THEME
+        if name in IMAGE_TOOL_NAMES:
+            theme_override = theme_arg if isinstance(theme_arg, dict) else None
+            if theme_arg is not None and not isinstance(theme_arg, dict):
+                raise ValueError("'theme' must be an object for image chart tools")
+            if theme_preset_arg is not None and not isinstance(theme_preset_arg, str):
+                raise ValueError("'theme_preset' must be a string")
+
+            theme_preset = theme_preset_arg if isinstance(theme_preset_arg, str) else None
+            theme, theme_preset_used = resolve_image_theme(theme_preset, theme_override)
+        else:
+            theme = ChartTheme()
 
         chart: Any
         series: list[Any]
@@ -884,56 +1042,66 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
         else:
             return [types.TextContent(type="text", text=f"Неизвестный инструмент: {name}")]
 
-        formats: list[Literal["png", "svg", "base64"]] = [fmt] if fmt != "base64" else ["base64"]
+        if name in IMAGE_TOOL_NAMES:
+            output_dir = _resolve_output_dir()
+            saved_files: list[str] = []
+            format_saved: Literal["png", "svg"] | None = None
 
-        if output_path:
-            results = export_chart(
+            if save_to_disk and output_dir:
+                format_saved = "svg" if fmt == "svg" else "png"
+                export_result = export_chart(
+                    figure,
+                    format=[format_saved],
+                    output_dir=output_dir,
+                    filename=filename,
+                    width=width,
+                    height=height,
+                )
+                saved_value = export_result.get(format_saved)
+                if isinstance(saved_value, str):
+                    saved_files = [str(Path(saved_value).resolve())]
+
+            preview_uri = export_to_base64(
                 figure,
-                format=formats,
-                output_dir=output_path,
-                filename=filename,
+                format="png",
                 width=width,
                 height=height,
             )
+            preview_data = _strip_data_uri_prefix(preview_uri)
+
+            if save_to_disk and output_dir is None:
+                message = (
+                    "save_to_disk=true, но OUTPUT_DIR не задан. "
+                    "Файл не сохранён, возвращён preview."
+                )
+            elif save_to_disk and saved_files:
+                message = f"График сохранён: {saved_files[0]}"
+            elif save_to_disk:
+                message = "Сохранение запрошено, но файл не был сохранён."
+            else:
+                message = "Возвращён preview для чата без сохранения на диск."
+
+            response_payload = {
+                "success": True,
+                "saved": bool(saved_files),
+                "saved_files": saved_files,
+                "format_requested": fmt,
+                "format_saved": format_saved,
+                "theme_preset_used": theme_preset_used,
+                "preview_mime_type": "image/png",
+                "preview_base64": preview_uri,
+                "message": message,
+            }
+
             return [
+                types.ImageContent(type="image", mimeType="image/png", data=preview_data),
                 types.TextContent(
                     type="text",
-                    text=json.dumps(
-                        {
-                            "success": True,
-                            "message": f"График сохранён: {results}",
-                            "files": results,
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
+                    text=json.dumps(response_payload, ensure_ascii=False, indent=2),
+                ),
             ]
-        else:
-            results = export_chart(
-                figure,
-                format=formats,
-                filename=filename,
-                width=width,
-                height=height,
-            )
-            return [
-                types.TextContent(
-                    type="text",
-                    text=json.dumps(
-                        {
-                            "success": True,
-                            "data": {
-                                k: v[:100] + "..." if isinstance(v, str) and len(v) > 100 else v
-                                for k, v in results.items()
-                            },
-                            "format": fmt,
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                )
-            ]
+
+        return [types.TextContent(type="text", text=f"Неизвестный инструмент: {name}")]
 
     except Exception as e:
         return [

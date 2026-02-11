@@ -70,6 +70,7 @@ Tip: set output mode to `terminal` in `vvk-charts-cli` to preview console dashbo
 
 | Tool | Purpose |
 | --- | --- |
+| `list_theme_presets` | Lists available image/terminal themes |
 | `create_line_chart` | Trends over time |
 | `create_bar_chart` | Category comparison |
 | `create_pie_chart` | Part-to-whole split |
@@ -81,9 +82,35 @@ Tip: set output mode to `terminal` in `vvk-charts-cli` to preview console dashbo
 
 Common options supported by all tools:
 
-- `theme`, `title`, `width`, `height`
+- `theme_preset`, `theme`, `title`, `width`, `height`
 - `format` (`png`, `svg`, `base64`)
-- `output_path`, `filename`
+- `filename`, `save_to_disk`
+
+Image tools always return chat preview (`ImageContent`).
+To save files, set `save_to_disk: true` and configure `OUTPUT_DIR` in MCP `env`.
+
+## Theme presets
+
+Use `list_theme_presets` to get all available theme names at runtime.
+
+Image theme presets:
+- `clean_light` (default)
+- `dark_corporate`
+- `pastel_startup`
+- `medical_monitor`
+
+Terminal theme presets:
+- `dark_corporate_cli` (default)
+- `pastel_startup_cli`
+
+Example request:
+
+```json
+{
+  "tool": "list_theme_presets",
+  "arguments": {}
+}
+```
 
 ## Combined dashboard payload example
 
@@ -92,8 +119,9 @@ Common options supported by all tools:
   "title": "Marketing Dashboard",
   "rows": 1,
   "cols": 2,
+  "theme_preset": "dark_corporate",
   "format": "png",
-  "output_path": "./demo",
+  "save_to_disk": true,
   "filename": "combined_dashboard",
   "panels": [
     {
@@ -159,6 +187,30 @@ Common options supported by all tools:
 ```
 
 `raw_output: true` is recommended for terminal clients: tool returns only chart text (no JSON wrapper).
+
+## Image save behavior (`OUTPUT_DIR`)
+
+- `save_to_disk: false` (default): no file is written, preview is returned to chat.
+- `save_to_disk: true` and `OUTPUT_DIR` is set: file is saved only into `OUTPUT_DIR`.
+- `save_to_disk: true` and `OUTPUT_DIR` is not set: no error, preview only (`saved=false` in metadata).
+- `output_path` is not supported.
+
+Example MCP config fragment:
+
+```json
+{
+  "mcp": {
+    "vvkcharts": {
+      "type": "local",
+      "enabled": true,
+      "command": ["uvx", "--from", "git+https://github.com/valderan/vvk-charts-mcp.git", "vvk-charts-mcp"],
+      "env": {
+        "OUTPUT_DIR": "./output"
+      }
+    }
+  }
+}
+```
 
 ## Demo gallery
 

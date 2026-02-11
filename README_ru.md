@@ -70,6 +70,7 @@ CLI спрашивает, что рисовать, куда сохранять, 
 
 | Tool | Назначение |
 | --- | --- |
+| `list_theme_presets` | Возвращает доступные темы image/terminal |
 | `create_line_chart` | Тренды во времени |
 | `create_bar_chart` | Сравнение категорий |
 | `create_pie_chart` | Структура долей |
@@ -81,9 +82,35 @@ CLI спрашивает, что рисовать, куда сохранять, 
 
 Общие параметры для всех tools:
 
-- `theme`, `title`, `width`, `height`
+- `theme_preset`, `theme`, `title`, `width`, `height`
 - `format` (`png`, `svg`, `base64`)
-- `output_path`, `filename`
+- `filename`, `save_to_disk`
+
+Image tools всегда возвращают preview для чата (`ImageContent`).
+Для сохранения файлов включайте `save_to_disk: true` и задавайте `OUTPUT_DIR` в `env` MCP.
+
+## Тема-пресеты
+
+Используйте `list_theme_presets`, чтобы получить все доступные названия тем во время работы.
+
+Image-пресеты:
+- `clean_light` (по умолчанию)
+- `dark_corporate`
+- `pastel_startup`
+- `medical_monitor`
+
+Terminal-пресеты:
+- `dark_corporate_cli` (по умолчанию)
+- `pastel_startup_cli`
+
+Пример запроса:
+
+```json
+{
+  "tool": "list_theme_presets",
+  "arguments": {}
+}
+```
 
 ## Пример payload для комбинированного дашборда
 
@@ -92,8 +119,9 @@ CLI спрашивает, что рисовать, куда сохранять, 
   "title": "Marketing Dashboard",
   "rows": 1,
   "cols": 2,
+  "theme_preset": "dark_corporate",
   "format": "png",
-  "output_path": "./demo",
+  "save_to_disk": true,
   "filename": "combined_dashboard",
   "panels": [
     {
@@ -159,6 +187,30 @@ CLI спрашивает, что рисовать, куда сохранять, 
 ```
 
 `raw_output: true` рекомендуется для terminal-клиентов: tool вернёт только текст графика (без JSON-обёртки).
+
+## Поведение сохранения изображений (`OUTPUT_DIR`)
+
+- `save_to_disk: false` (по умолчанию): файл не пишется на диск, возвращается preview в чат.
+- `save_to_disk: true` и задан `OUTPUT_DIR`: файл сохраняется только в `OUTPUT_DIR`.
+- `save_to_disk: true` и `OUTPUT_DIR` не задан: ошибки нет, только preview (`saved=false` в метаданных).
+- `output_path` не поддерживается.
+
+Пример фрагмента MCP-конфига:
+
+```json
+{
+  "mcp": {
+    "vvkcharts": {
+      "type": "local",
+      "enabled": true,
+      "command": ["uvx", "--from", "git+https://github.com/valderan/vvk-charts-mcp.git", "vvk-charts-mcp"],
+      "env": {
+        "OUTPUT_DIR": "./output"
+      }
+    }
+  }
+}
+```
 
 ## Демо-галерея
 

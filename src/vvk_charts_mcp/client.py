@@ -1,145 +1,173 @@
-"""Interactive CLI client for manual chart generation checks."""
+"""Interactive CLI client for manual MCP tool checks."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Literal
+import asyncio
+import json
+import os
+from copy import deepcopy
+from typing import Any
 
-from vvk_charts_mcp.charts import (
-    AreaChart,
-    BarChart,
-    ChartTheme,
-    DataSeries,
-    LineChart,
-    PieChart,
-    PieDataSeries,
-    ScatterChart,
-)
-from vvk_charts_mcp.terminal import render_terminal_dashboard
-from vvk_charts_mcp.utils.export import export_chart
+import mcp.types as types
 
-FormatName = Literal["png", "svg", "base64"]
+from vvk_charts_mcp.server import call_tool
 
-
-@dataclass
-class Template:
-    key: str
-    title: str
-    chart_type: str
-    payload: dict[str, Any]
-
-
-TEMPLATES: list[Template] = [
-    Template(
-        key="1",
-        title="Monthly Sales Trend",
-        chart_type="line",
-        payload={
-            "title": "Monthly Sales, 2025",
-            "x_label": "Month",
-            "y_label": "Revenue, USD",
-            "data": [
-                {
-                    "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-                    "y": [32000, 38000, 35000, 42000, 47000, 52000],
-                    "name": "Online",
-                },
-                {
-                    "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-                    "y": [21000, 24000, 26000, 28000, 30000, 34000],
-                    "name": "Retail",
-                },
-            ],
-        },
-    ),
-    Template(
-        key="2",
-        title="Department KPI Bars",
-        chart_type="bar",
-        payload={
-            "title": "Department KPI Score",
-            "x_label": "Department",
-            "y_label": "Score",
-            "data": [
-                {
-                    "x": ["Sales", "Support", "Marketing", "R&D", "Finance"],
-                    "y": [83, 76, 88, 91, 79],
-                    "name": "Q1",
-                },
-                {
-                    "x": ["Sales", "Support", "Marketing", "R&D", "Finance"],
-                    "y": [87, 81, 84, 93, 82],
-                    "name": "Q2",
-                },
-            ],
-        },
-    ),
-    Template(
-        key="3",
-        title="Market Share Pie",
-        chart_type="pie",
-        payload={
-            "title": "Market Share",
-            "data": [
-                {
-                    "labels": ["Product A", "Product B", "Product C", "Product D"],
-                    "values": [42, 28, 18, 12],
-                    "name": "Products",
-                }
-            ],
-            "hole": 0.45,
-        },
-    ),
-    Template(
-        key="4",
-        title="Ad Spend vs Revenue Scatter",
-        chart_type="scatter",
-        payload={
-            "title": "Ad Spend Correlation",
-            "x_label": "Ad Spend, USD",
-            "y_label": "Revenue, USD",
-            "data": [
-                {
-                    "x": [1200, 1500, 1800, 2100, 2500, 2900, 3300],
-                    "y": [9400, 11200, 13100, 15300, 17500, 19200, 22000],
-                    "name": "Campaigns",
-                    "marker": {"size": [10, 12, 15, 11, 16, 18, 20]},
-                }
-            ],
-            "show_line": True,
-        },
-    ),
-    Template(
-        key="5",
-        title="Traffic Area Stack",
-        chart_type="area",
-        payload={
-            "title": "Website Traffic by Source",
-            "x_label": "Week",
-            "y_label": "Visits",
-            "data": [
-                {
-                    "x": ["W1", "W2", "W3", "W4", "W5", "W6"],
-                    "y": [3200, 3500, 3900, 4100, 4300, 4600],
-                    "name": "Organic",
-                },
-                {
-                    "x": ["W1", "W2", "W3", "W4", "W5", "W6"],
-                    "y": [1400, 1800, 2000, 2300, 2400, 2500],
-                    "name": "Paid",
-                },
-                {
-                    "x": ["W1", "W2", "W3", "W4", "W5", "W6"],
-                    "y": [900, 1100, 1200, 1350, 1500, 1650],
-                    "name": "Social",
-                },
-            ],
-            "stack": True,
-            "opacity": 0.7,
-        },
-    ),
+IMAGE_TOOLS = [
+    "create_line_chart",
+    "create_bar_chart",
+    "create_pie_chart",
+    "create_scatter_chart",
+    "create_area_chart",
+    "create_combined_dashboard",
 ]
+
+TERMINAL_TOOLS = ["create_terminal_chart", "create_terminal_dashboard"]
+UTILITY_TOOLS = ["list_theme_presets"]
+
+ALL_TOOL_PAYLOADS: dict[str, dict[str, Any]] = {
+    "create_line_chart": {
+        "title": "Monthly Revenue",
+        "x_label": "Month",
+        "y_label": "k USD",
+        "format": "png",
+        "filename": "line_revenue",
+        "data": [
+            {"name": "Online", "x": ["Jan", "Feb", "Mar", "Apr"], "y": [120, 140, 155, 170]},
+            {"name": "Retail", "x": ["Jan", "Feb", "Mar", "Apr"], "y": [95, 102, 118, 130]},
+        ],
+    },
+    "create_bar_chart": {
+        "title": "ROI by Channel",
+        "x_label": "Channel",
+        "y_label": "%",
+        "format": "png",
+        "filename": "bar_roi",
+        "barmode": "group",
+        "data": [
+            {"name": "Q1", "x": ["Search", "Social", "Email"], "y": [132, 108, 95]},
+            {"name": "Q2", "x": ["Search", "Social", "Email"], "y": [140, 115, 102]},
+        ],
+    },
+    "create_pie_chart": {
+        "title": "Budget Mix",
+        "format": "png",
+        "filename": "pie_budget",
+        "hole": 0.45,
+        "data": [
+            {
+                "name": "Channels",
+                "labels": ["Search", "Social", "Email", "Affiliate"],
+                "values": [42, 28, 20, 10],
+            }
+        ],
+    },
+    "create_scatter_chart": {
+        "title": "Spend vs Revenue",
+        "x_label": "Spend",
+        "y_label": "Revenue",
+        "format": "png",
+        "filename": "scatter_spend_revenue",
+        "show_line": True,
+        "data": [
+            {
+                "name": "Campaigns",
+                "x": [20, 30, 40, 55, 70, 90],
+                "y": [62, 84, 109, 150, 201, 248],
+                "marker": {"size": [9, 11, 12, 14, 16, 18]},
+            }
+        ],
+    },
+    "create_area_chart": {
+        "title": "Traffic by Source",
+        "x_label": "Week",
+        "y_label": "Visits",
+        "format": "png",
+        "filename": "area_traffic",
+        "stack": True,
+        "opacity": 0.65,
+        "data": [
+            {"name": "Organic", "x": ["W1", "W2", "W3", "W4"], "y": [3200, 3600, 3900, 4200]},
+            {"name": "Paid", "x": ["W1", "W2", "W3", "W4"], "y": [1400, 1700, 2100, 2300]},
+            {"name": "Social", "x": ["W1", "W2", "W3", "W4"], "y": [900, 1100, 1300, 1500]},
+        ],
+    },
+    "create_combined_dashboard": {
+        "title": "Executive Dashboard",
+        "rows": 1,
+        "cols": 2,
+        "format": "png",
+        "filename": "combined_exec",
+        "panels": [
+            {
+                "type": "line",
+                "row": 1,
+                "col": 1,
+                "title": "Revenue Trend",
+                "x_label": "Month",
+                "y_label": "k USD",
+                "data": [
+                    {
+                        "name": "Revenue",
+                        "x": ["Jan", "Feb", "Mar", "Apr", "May"],
+                        "y": [120, 132, 148, 160, 178],
+                    }
+                ],
+                "options": {"line_shape": "spline"},
+            },
+            {
+                "type": "pie",
+                "row": 1,
+                "col": 2,
+                "title": "Budget Split",
+                "data": [
+                    {"labels": ["Search", "Social", "Email"], "values": [45, 35, 20], "name": "Mix"}
+                ],
+                "options": {"hole": 0.4},
+            },
+        ],
+    },
+    "create_terminal_chart": {
+        "type": "line",
+        "title": "Terminal Revenue Trend",
+        "x_label": "Month",
+        "y_label": "k USD",
+        "theme": "dark_corporate_cli",
+        "raw_output": False,
+        "use_color": False,
+        "force_mono": False,
+        "data": [{"name": "Revenue", "x": ["Jan", "Feb", "Mar", "Apr"], "y": [120, 132, 148, 160]}],
+    },
+    "create_terminal_dashboard": {
+        "title": "Terminal Marketing Dashboard",
+        "theme": "dark_corporate_cli",
+        "raw_output": False,
+        "use_color": False,
+        "force_mono": False,
+        "panels": [
+            {
+                "type": "line",
+                "title": "Revenue",
+                "x_label": "Month",
+                "y_label": "k USD",
+                "data": [
+                    {
+                        "name": "Revenue",
+                        "x": ["Jan", "Feb", "Mar", "Apr"],
+                        "y": [120, 132, 148, 160],
+                    }
+                ],
+            },
+            {
+                "type": "bar",
+                "title": "ROI",
+                "x_label": "Channel",
+                "y_label": "%",
+                "data": [{"name": "ROI", "x": ["Search", "Social", "Email"], "y": [136, 112, 96]}],
+            },
+        ],
+    },
+    "list_theme_presets": {},
+}
 
 
 def ask(prompt: str, default: str | None = None) -> str:
@@ -148,215 +176,140 @@ def ask(prompt: str, default: str | None = None) -> str:
     return value or (default or "")
 
 
-def choose_template() -> Template:
-    print("\nChoose a template:")
-    for item in TEMPLATES:
-        print(f"  {item.key}. {item.title}")
+def _apply_runtime_options(
+    tool_name: str,
+    payload: dict[str, Any],
+    save_to_disk: bool,
+    fmt: str,
+    theme_preset: str,
+) -> None:
+    if tool_name in IMAGE_TOOLS:
+        payload["save_to_disk"] = save_to_disk
+        payload["format"] = fmt
+        payload["theme_preset"] = theme_preset
+
+
+def _print_text_payload(text: str) -> None:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        print(text)
+        return
+
+    print(json.dumps(parsed, ensure_ascii=False, indent=2))
+
+
+def _print_result_blocks(result: list[types.ContentBlock]) -> None:
+    has_image = False
+    for block in result:
+        if isinstance(block, types.ImageContent):
+            has_image = True
+            print(f"- image content: mime={block.mimeType}, base64_length={len(block.data)}")
+        elif isinstance(block, types.TextContent):
+            print("- text content:")
+            _print_text_payload(block.text)
+        else:
+            print(f"- other content block: {type(block).__name__}")
+
+    if not has_image:
+        print("- image preview: not returned")
+
+
+async def _invoke_tool(tool_name: str, payload: dict[str, Any]) -> None:
+    print(f"\n=== {tool_name} ===")
+    result = await call_tool(tool_name, payload)
+    _print_result_blocks(result)
+
+
+def choose_tool() -> str:
+    tools = UTILITY_TOOLS + IMAGE_TOOLS + TERMINAL_TOOLS
+    print("\nChoose MCP method:")
+    for idx, tool_name in enumerate(tools, start=1):
+        print(f"  {idx}. {tool_name}")
 
     while True:
-        picked = ask("Template number", "1")
-        for item in TEMPLATES:
-            if item.key == picked:
-                return item
+        picked = ask("Method number", "1")
+        if picked.isdigit():
+            index = int(picked) - 1
+            if 0 <= index < len(tools):
+                return tools[index]
         print("Invalid option, try again.")
 
 
-def choose_formats() -> list[FormatName]:
-    print("\nOutput format:")
-    print("  1. PNG")
-    print("  2. SVG")
-    print("  3. PNG + SVG")
-    print("  4. Base64 (both)")
+def choose_mode() -> tuple[bool, str, str]:
+    print("\nImage behavior:")
+    print("  1. Preview only (default)")
+    print("  2. Save to disk if OUTPUT_DIR is set")
+    mode = ask("Mode", "1")
+    save_to_disk = mode == "2"
 
-    picked = ask("Format", "3")
-    mapping: dict[str, list[FormatName]] = {
-        "1": ["png"],
-        "2": ["svg"],
-        "3": ["png", "svg"],
-        "4": ["base64"],
-    }
-    return mapping.get(picked, ["png", "svg"])
+    print("\nFormat for image methods:")
+    print("  1. png")
+    print("  2. svg")
+    print("  3. base64")
+    fmt_pick = ask("Format", "1")
+    fmt = {"1": "png", "2": "svg", "3": "base64"}.get(fmt_pick, "png")
+    print("\nImage theme preset:")
+    print("  1. clean_light")
+    print("  2. dark_corporate")
+    print("  3. pastel_startup")
+    print("  4. medical_monitor")
+    theme_pick = ask("Theme preset", "1")
+    theme_preset = {
+        "1": "clean_light",
+        "2": "dark_corporate",
+        "3": "pastel_startup",
+        "4": "medical_monitor",
+    }.get(theme_pick, "clean_light")
+    return save_to_disk, fmt, theme_preset
 
 
-def build_chart(template: Template, width: int, height: int) -> tuple[Any, str]:
-    theme = ChartTheme(
-        font_family="Inter, Segoe UI, sans-serif",
-        paper_bgcolor="#FFFFFF",
-        plot_background="#F7FAFC",
-        colors=["#2563EB", "#F59E0B", "#10B981", "#EF4444", "#8B5CF6"],
+async def run_single(save_to_disk: bool, fmt: str, theme_preset: str) -> int:
+    tool_name = choose_tool()
+    payload = deepcopy(ALL_TOOL_PAYLOADS[tool_name])
+    _apply_runtime_options(
+        tool_name,
+        payload,
+        save_to_disk=save_to_disk,
+        fmt=fmt,
+        theme_preset=theme_preset,
     )
+    await _invoke_tool(tool_name, payload)
+    return 0
 
-    chart: Any
-    data: list[Any]
 
-    if template.chart_type == "line":
-        chart = LineChart(
-            title=template.payload["title"],
-            x_label=template.payload["x_label"],
-            y_label=template.payload["y_label"],
-            theme=theme,
-            width=width,
-            height=height,
+async def run_all(save_to_disk: bool, fmt: str, theme_preset: str) -> int:
+    for tool_name in UTILITY_TOOLS + IMAGE_TOOLS + TERMINAL_TOOLS:
+        payload = deepcopy(ALL_TOOL_PAYLOADS[tool_name])
+        _apply_runtime_options(
+            tool_name,
+            payload,
+            save_to_disk=save_to_disk,
+            fmt=fmt,
+            theme_preset=theme_preset,
         )
-        data = [DataSeries(**item) for item in template.payload["data"]]
-        return chart.build(data), "line_chart"
-
-    if template.chart_type == "bar":
-        chart = BarChart(
-            title=template.payload["title"],
-            x_label=template.payload["x_label"],
-            y_label=template.payload["y_label"],
-            theme=theme,
-            width=width,
-            height=height,
-            barmode="group",
-        )
-        data = [DataSeries(**item) for item in template.payload["data"]]
-        return chart.build(data), "bar_chart"
-
-    if template.chart_type == "pie":
-        chart = PieChart(
-            title=template.payload["title"],
-            theme=theme,
-            width=width,
-            height=height,
-            hole=template.payload.get("hole", 0.0),
-        )
-        data = [PieDataSeries(**item) for item in template.payload["data"]]
-        return chart.build(data), "pie_chart"
-
-    if template.chart_type == "scatter":
-        chart = ScatterChart(
-            title=template.payload["title"],
-            x_label=template.payload["x_label"],
-            y_label=template.payload["y_label"],
-            theme=theme,
-            width=width,
-            height=height,
-            show_line=template.payload.get("show_line", False),
-        )
-        data = [DataSeries(**item) for item in template.payload["data"]]
-        return chart.build(data), "scatter_chart"
-
-    chart = AreaChart(
-        title=template.payload["title"],
-        x_label=template.payload["x_label"],
-        y_label=template.payload["y_label"],
-        theme=theme,
-        width=width,
-        height=height,
-        stack=template.payload.get("stack", True),
-        opacity=template.payload.get("opacity", 0.7),
-    )
-    data = [DataSeries(**item) for item in template.payload["data"]]
-    return chart.build(data), "area_chart"
+        await _invoke_tool(tool_name, payload)
+    return 0
 
 
 def run_interactive() -> int:
-    print("VVK Charts CLI - interactive visual test client")
-    print("Use this to quickly verify all chart functions.\n")
+    print("VVK Charts CLI - MCP tools smoke checker")
+    print("This client calls all server methods with example payloads.")
+    print(f"OUTPUT_DIR={os.getenv('OUTPUT_DIR', '<not set>')}")
 
-    output_mode = ask("Output mode: image or terminal", "image").strip().lower()
-    if output_mode in {"terminal", "term", "t"}:
-        return run_terminal_demo()
+    save_to_disk, fmt, theme_preset = choose_mode()
 
-    template = choose_template()
-    output_dir = Path(ask("Output folder", "./output")).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    filename = ask("File name (without extension)", template.chart_type)
-    formats = choose_formats()
+    print("\nAction:")
+    print("  1. Run one method")
+    print("  2. Run all methods")
+    action = ask("Action", "2")
 
-    width = int(ask("Image width", "1280"))
-    height = int(ask("Image height", "720"))
+    if action == "1":
+        return asyncio.run(
+            run_single(save_to_disk=save_to_disk, fmt=fmt, theme_preset=theme_preset)
+        )
 
-    figure, default_name = build_chart(template, width=width, height=height)
-    base_name = filename or default_name
-    result = export_chart(
-        figure,
-        format=formats,
-        output_dir=None if formats == ["base64"] else output_dir,
-        filename=base_name,
-        width=width,
-        height=height,
-    )
-
-    print("\nDone.")
-    if "base64_png" in result:
-        print("- Base64 PNG generated")
-    if "base64_svg" in result:
-        print("- Base64 SVG generated")
-    if "png" in result:
-        png_value = result["png"]
-        print(f"- PNG: {png_value if isinstance(png_value, str) else '<bytes>'}")
-    if "svg" in result:
-        svg_value = result["svg"]
-        print(f"- SVG: {svg_value if isinstance(svg_value, str) else '<content>'}")
-    return 0
-
-
-def run_terminal_demo() -> int:
-    print("\nTerminal dashboard mode")
-    print("  1. Dark corporate")
-    print("  2. Pastel startup")
-    picked = ask("Theme", "1")
-    theme = "pastel_startup_cli" if picked == "2" else "dark_corporate_cli"
-
-    panels = [
-        {
-            "type": "line",
-            "title": "Revenue Trend",
-            "x_label": "Month",
-            "y_label": "k USD",
-            "data": [
-                {
-                    "name": "Revenue",
-                    "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-                    "y": [120, 132, 148, 160, 178, 190],
-                }
-            ],
-        },
-        {
-            "type": "bar",
-            "title": "Channel ROI",
-            "x_label": "Channel",
-            "y_label": "%",
-            "data": [
-                {
-                    "name": "ROI",
-                    "x": ["Search", "Social", "Email", "Aff"],
-                    "y": [135, 110, 92, 77],
-                }
-            ],
-        },
-        {
-            "type": "scatter",
-            "title": "Spend vs Revenue",
-            "x_label": "Spend",
-            "y_label": "Revenue",
-            "data": [
-                {
-                    "name": "Campaigns",
-                    "x": [20, 30, 40, 55, 70, 90],
-                    "y": [60, 83, 110, 149, 196, 248],
-                }
-            ],
-        },
-    ]
-
-    result = render_terminal_dashboard(
-        panels=panels,
-        title="Terminal Marketing Dashboard",
-        theme=theme,
-        width=100,
-        height=36,
-        use_color=True,
-        force_mono=False,
-    )
-    print("\n" + str(result["dashboard"]))
-    print(
-        f"\nrender_mode={result['render_mode']} engine={result['engine']} theme={result['theme']}"
-    )
-    return 0
+    return asyncio.run(run_all(save_to_disk=save_to_disk, fmt=fmt, theme_preset=theme_preset))
 
 
 def main() -> None:

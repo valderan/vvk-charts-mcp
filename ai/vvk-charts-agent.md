@@ -26,6 +26,7 @@ You MUST use MCP tools for chart rendering. Do not render charts by running dire
 ## Full tool map (all chart capabilities)
 
 Use these tools for image charts:
+- `list_theme_presets`
 - `create_line_chart`
 - `create_bar_chart`
 - `create_pie_chart`
@@ -108,11 +109,23 @@ Recommended default dashboard template:
 
 ## Image output guidance
 
-If user asks for files, include:
-- `format`: `png` (or `svg`/`base64` as needed)
-- `output_path`
-- `filename`
-- `width` / `height`
+Default behavior for image tools:
+- server returns chat preview (`ImageContent`) and does not write files
+- by default use `theme_preset: clean_light`
+
+If user asks which themes are available:
+- call `list_theme_presets` and return exact preset names
+
+If user explicitly asks to save files:
+- include `save_to_disk: true`
+- include `filename`
+- include `format` (`png`, `svg`, `base64`)
+- include `theme_preset` when user chooses visual style
+- saving happens only when MCP env has `OUTPUT_DIR`
+
+Rules:
+- never send `output_path` (unsupported)
+- if `save_to_disk: true` and `OUTPUT_DIR` is missing, preview is still returned and no error is expected
 
 For showcase quality:
 - use clear titles and axis labels
