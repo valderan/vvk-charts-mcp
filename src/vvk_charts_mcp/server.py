@@ -680,14 +680,18 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
     try:
         data = arguments.get("data", [])
         title = arguments.get("title")
-        theme_dict = arguments.get("theme")
+        theme_arg = arguments.get("theme")
         fmt: Literal["png", "svg", "base64"] = arguments.get("format", "base64")
         output_path = arguments.get("output_path")
         filename = arguments.get("filename", f"{name.replace('create_', '')}")
         width = arguments.get("width")
         height = arguments.get("height")
 
-        theme = parse_theme(theme_dict)
+        theme = (
+            parse_theme(theme_arg)
+            if isinstance(theme_arg, dict) or theme_arg is None
+            else ChartTheme()
+        )
 
         chart: Any
         series: list[Any]
@@ -817,7 +821,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 y_label=arguments.get("y_label"),
                 width=arguments.get("width", 100),
                 height=arguments.get("height", 28),
-                theme=arguments.get("theme"),
+                theme=theme_arg,
                 use_color=arguments.get("use_color", True),
                 force_mono=arguments.get("force_mono", False),
             )
@@ -834,7 +838,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 title=title,
                 width=arguments.get("width", 120),
                 height=arguments.get("height", 32),
-                theme=arguments.get("theme"),
+                theme=theme_arg,
                 use_color=arguments.get("use_color", True),
                 force_mono=arguments.get("force_mono", False),
             )
