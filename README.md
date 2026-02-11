@@ -26,6 +26,7 @@ Modern Python MCP server for rendering charts and diagrams (`line`, `bar`, `pie`
 - [Quick start](#quick-start)
 - [MCP tools](#mcp-tools)
 - [Combined dashboard payload example](#combined-dashboard-payload-example)
+- [Terminal chart payload example](#terminal-chart-payload-example)
 - [Demo gallery](#demo-gallery)
 - [AI presets (skill and agent)](#ai-presets-skill-and-agent)
 - [OpenCode setup (detailed)](#opencode-setup-detailed)
@@ -35,6 +36,7 @@ Modern Python MCP server for rendering charts and diagrams (`line`, `bar`, `pie`
 ## Features
 
 - MCP tools for single charts and mixed dashboards.
+- Terminal chart tools with ANSI rendering and monochrome fallback.
 - Modern Plotly styling with full theme customization.
 - Works with multi-series and larger datasets.
 - Export formats: `png`, `svg`, `base64`.
@@ -62,6 +64,8 @@ uvx run vvk-charts-cli
 
 The CLI asks what to draw, where to save, output format, and image size.
 
+Tip: set output mode to `terminal` in `vvk-charts-cli` to preview console dashboards.
+
 ## MCP tools
 
 | Tool | Purpose |
@@ -72,6 +76,8 @@ The CLI asks what to draw, where to save, output format, and image size.
 | `create_scatter_chart` | Correlation and bubble plots |
 | `create_area_chart` | Stacked/cumulative composition |
 | `create_combined_dashboard` | Multiple chart types in one image |
+| `create_terminal_chart` | ANSI/mono chart output for terminal clients |
+| `create_terminal_dashboard` | Multi-panel terminal dashboard as plain text |
 
 Common options supported by all tools:
 
@@ -124,6 +130,30 @@ Common options supported by all tools:
       }
     }
   ]
+}
+```
+
+## Terminal chart payload example
+
+```json
+{
+  "tool": "create_terminal_chart",
+  "arguments": {
+    "type": "line",
+    "title": "Revenue Trend (CLI)",
+    "x_label": "Month",
+    "y_label": "k USD",
+    "theme": "dark_corporate_cli",
+    "use_color": true,
+    "force_mono": false,
+    "data": [
+      {
+        "name": "Revenue",
+        "x": ["Jan", "Feb", "Mar", "Apr", "May"],
+        "y": [120, 132, 148, 160, 178]
+      }
+    ]
+  }
 }
 ```
 

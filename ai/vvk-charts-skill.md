@@ -24,6 +24,7 @@ metadata:
 - Correlation/distribution -> `create_scatter_chart`
 - Cumulative composition over time -> `create_area_chart`
 - Executive or mixed layout -> `create_combined_dashboard`
+- Console-native rendering -> `create_terminal_chart` / `create_terminal_dashboard`
 
 ## Input shaping rules
 

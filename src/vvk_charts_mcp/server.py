@@ -19,6 +19,7 @@ from vvk_charts_mcp.charts import (
     PieDataSeries,
     ScatterChart,
 )
+from vvk_charts_mcp.terminal import render_terminal_chart, render_terminal_dashboard
 from vvk_charts_mcp.utils.export import export_chart
 
 server = Server("vvk-charts-mcp")
@@ -561,6 +562,115 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["panels"],
             },
         ),
+        types.Tool(
+            name="create_terminal_chart",
+            description="Рисует график для консоли (ANSI с авто-fallback в монохром).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["line", "bar", "scatter", "area"],
+                        "description": "Тип терминального графика",
+                    },
+                    "data": {
+                        "type": "array",
+                        "description": "Серии данных",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "x": {
+                                    "type": "array",
+                                    "items": {"type": ["string", "number", "integer", "boolean"]},
+                                },
+                                "y": {"type": "array", "items": {"type": "number"}},
+                                "name": {"type": "string"},
+                            },
+                            "required": ["y"],
+                        },
+                    },
+                    "title": {"type": "string"},
+                    "x_label": {"type": "string"},
+                    "y_label": {"type": "string"},
+                    "width": {"type": "integer", "default": 100},
+                    "height": {"type": "integer", "default": 28},
+                    "theme": {
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "enum": ["dark_corporate_cli", "pastel_startup_cli"],
+                            },
+                            {"type": "object"},
+                        ]
+                    },
+                    "use_color": {"type": "boolean", "default": True},
+                    "force_mono": {"type": "boolean", "default": False},
+                },
+                "required": ["type", "data"],
+            },
+        ),
+        types.Tool(
+            name="create_terminal_dashboard",
+            description="Рисует текстовый дашборд для консоли из нескольких панелей.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "width": {"type": "integer", "default": 120},
+                    "height": {"type": "integer", "default": 32},
+                    "theme": {
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "enum": ["dark_corporate_cli", "pastel_startup_cli"],
+                            },
+                            {"type": "object"},
+                        ]
+                    },
+                    "use_color": {"type": "boolean", "default": True},
+                    "force_mono": {"type": "boolean", "default": False},
+                    "panels": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["line", "bar", "scatter", "area"],
+                                },
+                                "title": {"type": "string"},
+                                "x_label": {"type": "string"},
+                                "y_label": {"type": "string"},
+                                "data": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "x": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "integer",
+                                                        "boolean",
+                                                    ]
+                                                },
+                                            },
+                                            "y": {"type": "array", "items": {"type": "number"}},
+                                            "name": {"type": "string"},
+                                        },
+                                        "required": ["y"],
+                                    },
+                                },
+                            },
+                            "required": ["type", "data"],
+                        },
+                    },
+                },
+                "required": ["panels"],
+            },
+        ),
     ]
 
 
@@ -697,6 +807,43 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 vertical_spacing=vertical_spacing,
                 horizontal_spacing=horizontal_spacing,
             )
+
+        elif name == "create_terminal_chart":
+            result = render_terminal_chart(
+                chart_type=arguments.get("type", "line"),
+                data=arguments.get("data", []),
+                title=title,
+                x_label=arguments.get("x_label"),
+                y_label=arguments.get("y_label"),
+                width=arguments.get("width", 100),
+                height=arguments.get("height", 28),
+                theme=arguments.get("theme"),
+                use_color=arguments.get("use_color", True),
+                force_mono=arguments.get("force_mono", False),
+            )
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps(result, ensure_ascii=False, indent=2),
+                )
+            ]
+
+        elif name == "create_terminal_dashboard":
+            result = render_terminal_dashboard(
+                panels=arguments.get("panels", []),
+                title=title,
+                width=arguments.get("width", 120),
+                height=arguments.get("height", 32),
+                theme=arguments.get("theme"),
+                use_color=arguments.get("use_color", True),
+                force_mono=arguments.get("force_mono", False),
+            )
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps(result, ensure_ascii=False, indent=2),
+                )
+            ]
 
         else:
             return [types.TextContent(type="text", text=f"Неизвестный инструмент: {name}")]

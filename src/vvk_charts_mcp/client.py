@@ -16,6 +16,7 @@ from vvk_charts_mcp.charts import (
     PieDataSeries,
     ScatterChart,
 )
+from vvk_charts_mcp.terminal import render_terminal_dashboard
 from vvk_charts_mcp.utils.export import export_chart
 
 FormatName = Literal["png", "svg", "base64"]
@@ -255,6 +256,10 @@ def run_interactive() -> int:
     print("VVK Charts CLI - interactive visual test client")
     print("Use this to quickly verify all chart functions.\n")
 
+    output_mode = ask("Output mode: image or terminal", "image").strip().lower()
+    if output_mode in {"terminal", "term", "t"}:
+        return run_terminal_demo()
+
     template = choose_template()
     output_dir = Path(ask("Output folder", "./output")).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -286,6 +291,71 @@ def run_interactive() -> int:
     if "svg" in result:
         svg_value = result["svg"]
         print(f"- SVG: {svg_value if isinstance(svg_value, str) else '<content>'}")
+    return 0
+
+
+def run_terminal_demo() -> int:
+    print("\nTerminal dashboard mode")
+    print("  1. Dark corporate")
+    print("  2. Pastel startup")
+    picked = ask("Theme", "1")
+    theme = "pastel_startup_cli" if picked == "2" else "dark_corporate_cli"
+
+    panels = [
+        {
+            "type": "line",
+            "title": "Revenue Trend",
+            "x_label": "Month",
+            "y_label": "k USD",
+            "data": [
+                {
+                    "name": "Revenue",
+                    "x": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+                    "y": [120, 132, 148, 160, 178, 190],
+                }
+            ],
+        },
+        {
+            "type": "bar",
+            "title": "Channel ROI",
+            "x_label": "Channel",
+            "y_label": "%",
+            "data": [
+                {
+                    "name": "ROI",
+                    "x": ["Search", "Social", "Email", "Aff"],
+                    "y": [135, 110, 92, 77],
+                }
+            ],
+        },
+        {
+            "type": "scatter",
+            "title": "Spend vs Revenue",
+            "x_label": "Spend",
+            "y_label": "Revenue",
+            "data": [
+                {
+                    "name": "Campaigns",
+                    "x": [20, 30, 40, 55, 70, 90],
+                    "y": [60, 83, 110, 149, 196, 248],
+                }
+            ],
+        },
+    ]
+
+    result = render_terminal_dashboard(
+        panels=panels,
+        title="Terminal Marketing Dashboard",
+        theme=theme,
+        width=100,
+        height=36,
+        use_color=True,
+        force_mono=False,
+    )
+    print("\n" + str(result["dashboard"]))
+    print(
+        f"\nrender_mode={result['render_mode']} engine={result['engine']} theme={result['theme']}"
+    )
     return 0
 
 
