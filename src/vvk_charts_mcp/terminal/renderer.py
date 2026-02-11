@@ -5,8 +5,9 @@ from __future__ import annotations
 import io
 import math
 import os
+import re
 from contextlib import redirect_stdout
-from typing import Any
+from typing import Any, Literal
 
 from vvk_charts_mcp.terminal.themes import resolve_cli_theme
 
@@ -23,6 +24,14 @@ def should_use_color(use_color: bool = True, force_mono: bool = False) -> bool:
     if term.lower() == "dumb":
         return False
     return True
+
+
+ANSI_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+
+
+def strip_ansi(text: str) -> str:
+    """Strip ANSI escape sequences from text output."""
+    return ANSI_RE.sub("", text)
 
 
 def _safe_float(value: Any) -> float:
@@ -168,6 +177,7 @@ def render_terminal_chart(
     theme: str | dict[str, Any] | None = None,
     use_color: bool = True,
     force_mono: bool = False,
+    text_mode: Literal["auto", "plotext_stripped", "fallback"] = "auto",
 ) -> dict[str, Any]:
     """Render a terminal chart and return text plus metadata."""
     if chart_type not in {"line", "bar", "scatter", "area"}:
@@ -176,10 +186,14 @@ def render_terminal_chart(
     if not data:
         raise ValueError("'data' must be a non-empty array")
 
+    if text_mode not in {"auto", "plotext_stripped", "fallback"}:
+        raise ValueError("'text_mode' must be one of: auto, plotext_stripped, fallback")
+
     resolved_theme = resolve_cli_theme(theme)
     ansi_enabled = should_use_color(use_color=use_color, force_mono=force_mono)
+    plotext_error: str | None = None
 
-    if ansi_enabled:
+    if text_mode != "fallback":
         try:
             text = _render_plotext_chart(
                 chart_type=chart_type,
@@ -191,15 +205,33 @@ def render_terminal_chart(
                 height=height,
                 colors=resolved_theme["colors"],
             )
+            if text_mode == "plotext_stripped":
+                return {
+                    "success": True,
+                    "render_mode": "mono",
+                    "engine": "plotext-stripped",
+                    "theme": resolved_theme["name"],
+                    "chart": strip_ansi(text),
+                }
+
+            if ansi_enabled:
+                return {
+                    "success": True,
+                    "render_mode": "ansi",
+                    "engine": "plotext",
+                    "theme": resolved_theme["name"],
+                    "chart": text,
+                }
+
             return {
                 "success": True,
-                "render_mode": "ansi",
-                "engine": "plotext",
+                "render_mode": "mono",
+                "engine": "plotext-stripped",
                 "theme": resolved_theme["name"],
-                "chart": text,
+                "chart": strip_ansi(text),
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            plotext_error = str(exc)
 
     text = _render_mono_chart(
         chart_type=chart_type,
@@ -211,13 +243,16 @@ def render_terminal_chart(
         height=height,
         mono_symbol=resolved_theme["mono_symbol"],
     )
-    return {
+    result = {
         "success": True,
         "render_mode": "mono",
         "engine": "fallback",
         "theme": resolved_theme["name"],
         "chart": text,
     }
+    if plotext_error:
+        result["fallback_reason"] = plotext_error
+    return result
 
 
 def render_terminal_dashboard(
@@ -228,6 +263,7 @@ def render_terminal_dashboard(
     theme: str | dict[str, Any] | None = None,
     use_color: bool = True,
     force_mono: bool = False,
+    text_mode: Literal["auto", "plotext_stripped", "fallback"] = "auto",
 ) -> dict[str, Any]:
     """Render several terminal charts as a text dashboard."""
     if not panels:
@@ -235,7 +271,8 @@ def render_terminal_dashboard(
 
     rendered: list[str] = []
     mode = "ansi"
-    engine = "plotext"
+    engine_rank = 0
+    panel_fallback_reasons: list[str] = []
     for idx, panel in enumerate(panels, start=1):
         result = render_terminal_chart(
             chart_type=str(panel.get("type", "line")),
@@ -248,10 +285,16 @@ def render_terminal_dashboard(
             theme=theme,
             use_color=use_color,
             force_mono=force_mono,
+            text_mode=text_mode,
         )
-        if result["render_mode"] == "mono":
+        if result["engine"] == "fallback":
+            engine_rank = max(engine_rank, 2)
             mode = "mono"
-            engine = "fallback"
+        elif result["engine"] == "plotext-stripped":
+            engine_rank = max(engine_rank, 1)
+            mode = "mono"
+        if "fallback_reason" in result:
+            panel_fallback_reasons.append(str(result["fallback_reason"]))
         rendered.append(str(result["chart"]))
 
     blocks: list[str] = []
@@ -260,10 +303,19 @@ def render_terminal_dashboard(
         blocks.append("=" * min(max(len(title), 12), width))
     blocks.append("\n\n".join(rendered))
 
-    return {
+    engine = "plotext"
+    if engine_rank == 2:
+        engine = "fallback"
+    elif engine_rank == 1:
+        engine = "plotext-stripped"
+
+    result = {
         "success": True,
         "render_mode": mode,
         "engine": engine,
         "theme": resolve_cli_theme(theme)["name"],
         "dashboard": "\n".join(blocks),
     }
+    if panel_fallback_reasons:
+        result["fallback_reason"] = "; ".join(panel_fallback_reasons)
+    return result

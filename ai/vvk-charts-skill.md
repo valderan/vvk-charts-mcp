@@ -1,6 +1,6 @@
 ---
 name: vvk-charts-mcp
-description: Build and style chart payloads for the vvk-charts-mcp server
+description: Build and render image and terminal charts with vvk-charts-mcp
 license: MIT
 compatibility: opencode
 metadata:
@@ -8,64 +8,189 @@ metadata:
   transport: mcp-stdio
 ---
 
-## What this skill does
+## Role
 
-- Chooses the most suitable chart type for user intent.
-- Produces clean MCP payloads for all tools in `vvk-charts-mcp`.
-- Applies modern chart design defaults (readable typography, color contrast, clear labels).
-- Helps with exporting charts as `png`, `svg`, or `base64`.
-- Builds advanced multi-panel dashboards similar to showcase files in `demo/`.
+You are a chart execution skill for `vvk-charts-mcp`.
 
-## Tool mapping
+Your job is to:
+- choose the correct MCP tool,
+- build valid payloads,
+- execute rendering through MCP,
+- return visible output in the format user requested.
 
-- Trend over time -> `create_line_chart`
-- Category comparison -> `create_bar_chart`
+Do not replace MCP rendering with ad-hoc plotting scripts unless explicitly asked to debug internals.
+
+## Complete chart catalog
+
+Image/chart tools:
+- `create_line_chart`
+- `create_bar_chart`
+- `create_pie_chart`
+- `create_scatter_chart`
+- `create_area_chart`
+- `create_combined_dashboard`
+
+Terminal tools:
+- `create_terminal_chart`
+- `create_terminal_dashboard`
+
+Terminal chart `type` values:
+- `line`
+- `bar`
+- `scatter`
+- `area`
+
+## Decision mapping
+
+- Trend over time -> `create_line_chart` or terminal `type=line`
+- Category comparison -> `create_bar_chart` or terminal `type=bar`
 - Part-to-whole -> `create_pie_chart`
-- Correlation/distribution -> `create_scatter_chart`
-- Cumulative composition over time -> `create_area_chart`
-- Executive or mixed layout -> `create_combined_dashboard`
-- Console-native rendering -> `create_terminal_chart` / `create_terminal_dashboard`
+- Correlation/distribution -> `create_scatter_chart` or terminal `type=scatter`
+- Cumulative composition -> `create_area_chart` or terminal `type=area`
+- Multi-panel executive layout -> `create_combined_dashboard` or `create_terminal_dashboard`
 
-## Input shaping rules
+## Required execution protocol
 
-- Keep `x`/`y` lengths equal per series.
-- Use explicit `name` for each series.
-- Set `title`, `x_label`, and `y_label` unless user requests a minimal chart.
-- Use `theme` for color palette, font, grid, and legend placement.
-- If the user requests local files, set `output_path` and `filename`.
-- For mixed dashboards, define `rows`, `cols`, and `panels` with explicit `row`/`col` for each panel.
+1. Understand target output
+- If user says console/terminal -> use terminal tools.
+- If user says file/image -> use image tools.
 
-## Showcase styles (demo-level)
+2. Validate data
+- Keep `x` and `y` lengths equal where both exist.
+- Ensure numeric series are numeric.
+- Ensure arrays are non-empty.
 
-- `dark_corporate`: dark paper/plot background, high contrast text, saturated accent colors.
-- `pastel_startup`: bright paper background, soft palette, clean white panels, gentle grid.
-- Typical executive layout: `2x2` panels with line + bar + pie + scatter/area.
+3. Apply sensible defaults
+- Fill `title`, `x_label`, `y_label` when omitted.
+- Keep labels short and readable.
+- For dashboards, cap panels to 2-4 for readability.
 
-## Performance guidance for large data
+4. Render through MCP and show result
+- Execute tool call.
+- Return chart output directly when user asks to "show" it.
 
-- Prefer line charts without point markers for dense series.
-- Limit annotation text to key points only.
-- Avoid pie charts with too many slices; switch to bars if labels become unreadable.
-- Consider splitting very large datasets across multiple charts.
+## Terminal rendering rules (critical)
 
-## Example payloads
+When user asks to see chart directly in console text, default to:
+- `raw_output: true`
+- `force_mono: false`
+- `use_color: false`
+
+Why this default:
+- `raw_output: true` returns plain chart text without JSON wrapper.
+- `force_mono: false` keeps full plot renderer path.
+- `use_color: false` avoids ANSI escape noise in clients that do not render ANSI.
+
+If user explicitly asks for ANSI colors and client supports ANSI:
+- set `use_color: true`
+- keep `force_mono: false`
+- keep `raw_output: true`
+
+If output looks simplified (sparkline style), run one diagnostic call with `raw_output: false` and inspect `engine` (`plotext`, `plotext-stripped`, or `fallback`).
+
+## Terminal dashboard rules
+
+Use `create_terminal_dashboard` when user wants multiple panels in console.
+
+Recommended panel set:
+- line (trend)
+- bar (comparison)
+- scatter (relationship)
+- area (composition)
+
+Each panel should include:
+- `type`
+- `title`
+- optional `x_label`, `y_label`
+- `data` series
+
+## Image/dashboard quality rules
+
+- Prefer modern theme styling and clear labels.
+- Use `create_combined_dashboard` for mixed visual stories.
+- If saving files, include `format`, `output_path`, `filename`, and explicit `width`/`height`.
+
+## Payload examples
+
+### Terminal chart (recommended default)
+
+```json
+{
+  "tool": "create_terminal_chart",
+  "arguments": {
+    "type": "line",
+    "title": "Revenue Trend",
+    "x_label": "Month",
+    "y_label": "k USD",
+    "theme": "dark_corporate_cli",
+    "raw_output": true,
+    "force_mono": false,
+    "use_color": false,
+    "data": [
+      {
+        "name": "Revenue",
+        "x": ["Jan", "Feb", "Mar", "Apr", "May"],
+        "y": [120, 132, 148, 160, 178]
+      }
+    ]
+  }
+}
+```
+
+### Terminal dashboard
+
+```json
+{
+  "tool": "create_terminal_dashboard",
+  "arguments": {
+    "title": "Terminal Executive Dashboard",
+    "raw_output": true,
+    "force_mono": false,
+    "use_color": false,
+    "panels": [
+      {
+        "type": "line",
+        "title": "Revenue Trend",
+        "x_label": "Month",
+        "y_label": "k USD",
+        "data": [
+          {
+            "name": "Revenue",
+            "x": ["Jan", "Feb", "Mar", "Apr"],
+            "y": [120, 132, 148, 160]
+          }
+        ]
+      },
+      {
+        "type": "bar",
+        "title": "ROI by Channel",
+        "x_label": "Channel",
+        "y_label": "%",
+        "data": [
+          {
+            "name": "ROI",
+            "x": ["Search", "Social", "Email", "Affiliate"],
+            "y": [136, 112, 121, 95]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Combined image dashboard
 
 ```json
 {
   "tool": "create_combined_dashboard",
   "arguments": {
-    "title": "Executive Marketing & Finance Dashboard",
+    "title": "Executive Marketing Dashboard",
     "rows": 2,
     "cols": 2,
     "format": "png",
     "output_path": "./demo",
-    "filename": "demo_combined_showcase",
-    "theme": {
-      "font_family": "Inter, Segoe UI, sans-serif",
-      "paper_bgcolor": "#F8FAFC",
-      "plot_background": "#FFFFFF",
-      "colors": ["#2563EB", "#7C3AED", "#10B981", "#F59E0B", "#EC4899"]
-    },
+    "filename": "combined_showcase",
     "panels": [
       {
         "type": "line",
@@ -80,10 +205,7 @@ metadata:
             "x": ["Jan", "Feb", "Mar", "Apr"],
             "y": [120, 132, 148, 160]
           }
-        ],
-        "options": {
-          "line_shape": "spline"
-        }
+        ]
       },
       {
         "type": "pie",
@@ -95,50 +217,7 @@ metadata:
             "labels": ["Search", "Social", "Email"],
             "values": [45, 35, 20]
           }
-        ],
-        "options": {
-          "hole": 0.45
-        }
-      }
-    ]
-  }
-}
-```
-
-```json
-{
-  "tool": "create_line_chart",
-  "arguments": {
-    "title": "Revenue by Month",
-    "x_label": "Month",
-    "y_label": "Revenue (USD)",
-    "format": "png",
-    "output_path": "./output",
-    "filename": "revenue-monthly",
-    "data": [
-      {
-        "name": "North Region",
-        "x": ["Jan", "Feb", "Mar", "Apr"],
-        "y": [12000, 13500, 12800, 14900]
-      }
-    ]
-  }
-}
-```
-
-```json
-{
-  "tool": "create_scatter_chart",
-  "arguments": {
-    "title": "Ad Spend vs Revenue",
-    "x_label": "Ad Spend",
-    "y_label": "Revenue",
-    "format": "svg",
-    "data": [
-      {
-        "name": "Campaigns",
-        "x": [100, 200, 300, 400],
-        "y": [1000, 1800, 2500, 3300]
+        ]
       }
     ]
   }

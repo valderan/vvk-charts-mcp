@@ -603,11 +603,19 @@ async def list_tools() -> list[types.Tool]:
                             {"type": "object"},
                         ]
                     },
-                    "use_color": {"type": "boolean", "default": True},
+                    "use_color": {"type": "boolean", "default": False},
                     "force_mono": {"type": "boolean", "default": False},
+                    "text_mode": {
+                        "type": "string",
+                        "enum": ["auto", "plotext_stripped", "fallback"],
+                        "default": "auto",
+                        "description": (
+                            "Режим текстового рендера: авто, strip ANSI из plotext, или fallback"
+                        ),
+                    },
                     "raw_output": {
                         "type": "boolean",
-                        "default": False,
+                        "default": True,
                         "description": "Вернуть только сырой текст графика без JSON-обёртки",
                     },
                 },
@@ -632,11 +640,19 @@ async def list_tools() -> list[types.Tool]:
                             {"type": "object"},
                         ]
                     },
-                    "use_color": {"type": "boolean", "default": True},
+                    "use_color": {"type": "boolean", "default": False},
                     "force_mono": {"type": "boolean", "default": False},
+                    "text_mode": {
+                        "type": "string",
+                        "enum": ["auto", "plotext_stripped", "fallback"],
+                        "default": "auto",
+                        "description": (
+                            "Режим текстового рендера: авто, strip ANSI из plotext, или fallback"
+                        ),
+                    },
                     "raw_output": {
                         "type": "boolean",
-                        "default": False,
+                        "default": True,
                         "description": "Вернуть только сырой текст дашборда без JSON-обёртки",
                     },
                     "panels": {
@@ -832,10 +848,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 width=arguments.get("width", 100),
                 height=arguments.get("height", 28),
                 theme=theme_arg,
-                use_color=arguments.get("use_color", True),
+                use_color=arguments.get("use_color", False),
                 force_mono=arguments.get("force_mono", False),
+                text_mode=arguments.get("text_mode", "auto"),
             )
-            if arguments.get("raw_output", False):
+            if arguments.get("raw_output", True):
                 return [types.TextContent(type="text", text=str(result["chart"]))]
             return [
                 types.TextContent(
@@ -851,10 +868,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 width=arguments.get("width", 120),
                 height=arguments.get("height", 32),
                 theme=theme_arg,
-                use_color=arguments.get("use_color", True),
+                use_color=arguments.get("use_color", False),
                 force_mono=arguments.get("force_mono", False),
+                text_mode=arguments.get("text_mode", "auto"),
             )
-            if arguments.get("raw_output", False):
+            if arguments.get("raw_output", True):
                 return [types.TextContent(type="text", text=str(result["dashboard"]))]
             return [
                 types.TextContent(
